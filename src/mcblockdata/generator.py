@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from mcblockdata import __version__
+from mcblockdata.classification import classify_blocks
 from mcblockdata.colors import extract_faces
 from mcblockdata.reports import convert_blocks, read_data_version
 
@@ -56,6 +57,7 @@ def build_version(
         "dataVersion": read_data_version(server_jar),
         "generator": {"repository": REPOSITORY, "version": __version__, "commit": _commit()},
         "blocks": blocks,
+        "families": classify_blocks(blocks, server_jar),
     }
     validate(data)
     output = Path("dist") / f"blockdata-{version}.json"
@@ -74,6 +76,19 @@ def validate(data: dict) -> None:
         Draft202012Validator(schema).validate(data)
     except ValidationError as exc:
         raise ValueError(f"blockdata schema検証に失敗しました: {exc.message}") from exc
+    block_ids = data["blocks"]
+    for family, shapes in data["families"].items():
+        for shape, block_id in shapes.items():
+            if block_id not in block_ids:
+                raise ValueError(
+                    f"family {family!r} の {shape!r} が存在しないブロックを参照します: {block_id}"
+                )
+            if block_ids[block_id].get("family") != family:
+                raise ValueError(f"family {family!r} とブロック {block_id} の属性が一致しません")
+    for block_id, block in block_ids.items():
+        for target in block.get("weathering", {}).values():
+            if target not in block_ids:
+                raise ValueError(f"block {block_id} のweathering先が存在しません: {target}")
 
 
 def _commit() -> str:

@@ -3,7 +3,7 @@
   "$id": "https://github.com/mc-blueprint/mc-blueprint-blockdata/schema/blockdata.schema.json",
   "title": "mc-blueprint blockdata v1",
   "type": "object",
-  "required": ["formatVersion", "minecraftVersion", "dataVersion", "generator", "blocks"],
+  "required": ["formatVersion", "minecraftVersion", "dataVersion", "generator", "blocks", "families"],
   "properties": {
     "formatVersion": {"const": 1},
     "minecraftVersion": {"type": "string", "minLength": 1},
@@ -24,13 +24,13 @@
       "patternProperties": {
         "^[a-z0-9_.-]+:[a-z0-9_./-]+$": {
           "type": "object",
-          "required": ["properties", "default"],
+          "required": ["properties", "default", "material", "shape"],
           "properties": {
             "properties": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
             "default": {"type": "object", "additionalProperties": {"type": "string"}},
             "material": {"enum": ["stone", "brick", "wood", "plaster", "terracotta", "concrete", "metal", "glass", "soil", "sand", "plant", "wool", "ice_snow", "ore", "mineral", "light", "liquid", "other"]},
             "subMaterial": {"type": "string"},
-            "shape": {"type": "string"},
+            "shape": {"enum": ["full", "stairs", "slab", "wall", "fence", "fence_gate", "pane", "door", "trapdoor", "button", "pressure_plate", "sign", "hanging_sign", "carpet", "rail", "plant", "fluid"]},
             "family": {"type": "string"},
             "tint": {"enum": ["none", "grass", "foliage", "water", "fixed"]},
             "light": {
