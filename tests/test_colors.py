@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from mcblockdata.colors import _rgb_color, extract_faces, extract_models
+from mcblockdata.colors import _cube_faces, _rgb_color, extract_faces, extract_models
 from mcblockdata.visuals import enrich_blocks
 
 
@@ -116,7 +116,12 @@ def test_multipart_rotated_boundary_planes_form_a_full_cube(tmp_path, name):
         plane = {"from": [0, 0, 0], "to": [16, 16, 0],
                  "faces": {"north": {"texture": "#test"}}}
         archive.writestr("assets/minecraft/models/block/plane.json",
-                         json.dumps({"elements": [plane]}))
+                         json.dumps({"textures": {"test": "minecraft:block/plane"},
+                                     "elements": [plane]}))
+        image = Image.new("RGBA", (1, 1), (100, 40, 20, 255))
+        stream = BytesIO()
+        image.save(stream, format="PNG")
+        archive.writestr("assets/minecraft/textures/block/plane.png", stream.getvalue())
         cross = {"from": [0, 0, 8], "to": [16, 16, 8],
                  "rotation": {"angle": 45, "axis": "y", "origin": [8, 8, 8]},
                  "faces": {"north": {"texture": "#test"}}}
@@ -142,3 +147,63 @@ def test_multipart_rotated_boundary_planes_form_a_full_cube(tmp_path, name):
     assert blocks[f"minecraft:{name}"]["light"][-1]["opacity"] == 15
     assert blocks["minecraft:cross"]["shape"] == "plant"
     assert blocks["minecraft:cross"]["light"][-1]["opacity"] == 0
+    faces = extract_faces(jar, blocks)
+    assert set(faces[f"minecraft:{name}"]) == {"top", "side", "bottom"}
+    assert set(faces["minecraft:open_planes"]) == {"side"}
+
+
+@pytest.mark.parametrize(("part", "top", "bottom"), [
+    pytest.param({"x": 90}, "south", "north", id="barrel-north"),
+    pytest.param({"x": 90, "y": 90}, "south", "north", id="log-axis-x"),
+    pytest.param({"x": 180}, "down", "up", id="upside-down"),
+    pytest.param({"x": 270}, "north", "south", id="x-270"),
+    pytest.param({"y": 90}, "up", "down", id="y-90"),
+    pytest.param({}, "up", "down", id="unrotated"),
+])
+def test_default_variant_rotation_moves_face_colors_and_tint_layers(tmp_path, part, top, bottom):
+    jar = tmp_path / "client.zip"
+    colors = {"up": (255, 0, 0), "down": (0, 255, 0), "north": (0, 0, 255),
+              "south": (255, 255, 0), "west": (255, 0, 255), "east": (0, 255, 255)}
+    tinted = {"up", "south"}
+    blocks = {"minecraft:test": {"default": {"axis": "x"}}}
+    with zipfile.ZipFile(jar, "w") as archive:
+        archive.writestr("assets/minecraft/blockstates/test.json", json.dumps({
+            "variants": {"axis=x": {"model": "minecraft:block/test", "uvlock": True, **part},
+                         "axis=y": {"model": "minecraft:block/test"}}
+        }))
+        archive.writestr("assets/minecraft/models/block/test.json", json.dumps({
+            "textures": {direction: f"minecraft:block/{direction}" for direction in colors},
+            "elements": [{"from": [0, 0, 0], "to": [16, 16, 16], "faces": {
+                direction: {"texture": f"#{direction}", "cullface": direction,
+                            "tintindex": 0 if direction in tinted else -1}
+                for direction in colors
+            }}],
+        }))
+        for direction, rgb in colors.items():
+            image = Image.new("RGBA", (1, 1), (*rgb, 255))
+            stream = BytesIO()
+            image.save(stream, format="PNG")
+            archive.writestr(f"assets/minecraft/textures/block/{direction}.png", stream.getvalue())
+    faces = extract_faces(jar, blocks)["minecraft:test"]
+    assert extract_models(jar, blocks)["minecraft:test"]["fullCube"]
+    for face, directions in (("top", {top}), ("bottom", {bottom}),
+                             ("side", colors.keys() - {top, bottom})):
+        groups = {"oklab": directions}
+        if directions & tinted:
+            groups["tintedOklab"] = directions & tinted
+            if directions - tinted:
+                groups["untintedOklab"] = directions - tinted
+        assert faces[face].keys() == groups.keys()
+        for field, selected in groups.items():
+            expected = np.quantile([_rgb_color(colors[d]) for d in sorted(selected)],
+                                   [0.05, 0.25, 0.5, 0.75, 0.95], axis=0)
+            for i, channel in enumerate(("L", "a", "b")):
+                np.testing.assert_allclose(faces[face][field][channel], expected[:, i])
+
+
+def test_boundary_face_uses_clockwise_x_then_y_rotation():
+    north = {"from": [0, 0, 0], "to": [16, 16, 0], "faces": {"north": {}}}
+    up = {"from": [0, 16, 0], "to": [16, 16, 16], "faces": {"up": {}}}
+    assert _cube_faces(north, {"y": 90}) == {(1, 0, 0)}
+    assert _cube_faces(north, {"x": 90}) == {(0, -1, 0)}
+    assert _cube_faces(up, {"x": 90, "y": 90}) == {(1, 0, 0)}
