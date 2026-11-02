@@ -7,6 +7,7 @@ import json
 import os
 import urllib.request
 from pathlib import Path
+from zipfile import ZipFile
 
 VERSION_MANIFEST_URL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 
@@ -64,3 +65,22 @@ def _sha1(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def read_server_entries(server_jar: Path, prefix: str) -> dict[str, bytes]:
+    """Bundler形式を含むserver jarから指定prefixのデータを読む。"""
+    import io
+
+    with ZipFile(server_jar) as outer:
+        nested_name = next(
+            (
+                name
+                for name in outer.namelist()
+                if name.startswith("META-INF/versions/") and name.endswith(".jar")
+            ),
+            None,
+        )
+        if nested_name is None:
+            return {name: outer.read(name) for name in outer.namelist() if name.startswith(prefix)}
+        with ZipFile(io.BytesIO(outer.read(nested_name))) as inner:
+            return {name: inner.read(name) for name in inner.namelist() if name.startswith(prefix)}

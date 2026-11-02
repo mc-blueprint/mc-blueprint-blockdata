@@ -3,7 +3,7 @@
   "$id": "https://github.com/mc-blueprint/mc-blueprint-blockdata/schema/blockdata.schema.json",
   "title": "mc-blueprint blockdata v1",
   "type": "object",
-  "required": ["formatVersion", "minecraftVersion", "dataVersion", "generator", "blocks", "families"],
+  "required": ["formatVersion", "minecraftVersion", "dataVersion", "generator", "blocks", "families", "tints"],
   "properties": {
     "formatVersion": {"const": 1},
     "minecraftVersion": {"type": "string", "minLength": 1},
@@ -24,7 +24,7 @@
       "patternProperties": {
         "^[a-z0-9_.-]+:[a-z0-9_./-]+$": {
           "type": "object",
-          "required": ["properties", "default", "material", "shape"],
+          "required": ["properties", "default", "material", "shape", "tint", "light", "render"],
           "properties": {
             "properties": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}},
             "default": {"type": "object", "additionalProperties": {"type": "string"}},

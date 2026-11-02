@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import re
 from collections import defaultdict
-from zipfile import ZipFile
+
+from mcblockdata.jars import read_server_entries
 
 MATERIALS = (
     "stone",
@@ -444,31 +445,13 @@ def _weathering(path: str, blocks: dict) -> dict[str, str]:
 
 def _read_block_tags(server_jar) -> dict[str, set[str]]:
     """server jar（bundlerを含む）からminecraftのblock tagを読み取る。"""
-    from pathlib import Path
-
     raw_tags = {}
-    with ZipFile(Path(server_jar)) as outer:
-        nested_name = next(
-            (
-                name
-                for name in outer.namelist()
-                if name.startswith("META-INF/versions/") and name.endswith(".jar")
-            ),
-            None,
-        )
-        if nested_name:
-            import io
-
-            jar = ZipFile(io.BytesIO(outer.read(nested_name)))
-        else:
-            jar = outer
-        with jar:
-            for name in jar.namelist():
-                match = re.fullmatch(r"data/minecraft/tags/block/(.+)\.json", name)
-                if not match:
-                    continue
-                contents = json.loads(jar.read(name))
-                raw_tags[f"minecraft:{match.group(1)}"] = contents.get("values", [])
+    entries = read_server_entries(server_jar, "data/minecraft/tags/block/")
+    for name, content in entries.items():
+        match = re.fullmatch(r"data/minecraft/tags/block/(.+)\.json", name)
+        if match:
+            contents = json.loads(content)
+            raw_tags[f"minecraft:{match.group(1)}"] = contents.get("values", [])
 
     resolved = {}
 
