@@ -97,6 +97,53 @@ def validate(data: dict) -> None:
                 raise ValueError(f"block {block_id} のweathering先が存在しません: {target}")
 
 
+def write_checksums(paths: list[Path], output: Path = Path("dist/SHA256SUMS")) -> None:
+    """生成したJSON資産のSHA-256一覧を書き出す。"""
+    import hashlib
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        "".join(
+            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
+            for path in sorted(paths, key=lambda item: item.name)
+        ),
+        encoding="utf-8",
+    )
+
+
+def write_diff(old_version: str, new_version: str) -> Path:
+    """隣接版のブロック追加・削除・状態変更をJSONに記録する。"""
+    old = json.loads(Path("dist", f"blockdata-{old_version}.json").read_text(encoding="utf-8"))
+    new = json.loads(Path("dist", f"blockdata-{new_version}.json").read_text(encoding="utf-8"))
+    old_blocks, new_blocks = old["blocks"], new["blocks"]
+    common = old_blocks.keys() & new_blocks.keys()
+    changes = {
+        "formatVersion": 1,
+        "from": old_version,
+        "to": new_version,
+        "added": sorted(new_blocks.keys() - old_blocks.keys()),
+        "removed": sorted(old_blocks.keys() - new_blocks.keys()),
+        "changed": {
+            key: {
+                field: {
+                    "from": old_blocks[key].get(field, {}),
+                    "to": new_blocks[key].get(field, {}),
+                }
+                for field in ("properties", "default")
+                if old_blocks[key].get(field, {}) != new_blocks[key].get(field, {})
+            }
+            for key in sorted(common)
+            if any(
+                old_blocks[key].get(field, {}) != new_blocks[key].get(field, {})
+                for field in ("properties", "default")
+            )
+        },
+    }
+    path = Path("dist", f"blockdata-diff-{old_version}-{new_version}.json")
+    path.write_text(json.dumps(changes, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
 def _commit() -> str:
     try:
         return subprocess.run(
