@@ -1,5 +1,10 @@
 import json
+import subprocess
+from pathlib import Path
 
+import pytest
+
+from mcblockdata import generator
 from mcblockdata.generator import write_checksums, write_diff
 
 
@@ -35,6 +40,7 @@ def test_write_diff_records_added_removed_and_state_changes(tmp_path, monkeypatc
             }
         }
     }
+    assert b"\r" not in path.read_bytes()
 
 
 def test_write_checksums_includes_sorted_asset_names(tmp_path):
@@ -50,3 +56,22 @@ def test_write_checksums_includes_sorted_asset_names(tmp_path):
         "a.json",
         "b.json",
     ]
+    assert b"\r" not in output.read_bytes()
+
+
+def test_commit_uses_generator_checkout_outside_working_directory(tmp_path, monkeypatch):
+    expected = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=Path(generator.__file__).resolve().parents[2], text=True
+    ).strip()
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    monkeypatch.chdir(tmp_path)
+    assert generator._commit() == expected
+
+
+def test_commit_failure_aborts_instead_of_returning_unknown(monkeypatch):
+    def fail(*args, **kwargs):
+        raise subprocess.CalledProcessError(1, args[0])
+
+    monkeypatch.setattr(generator.subprocess, "run", fail)
+    with pytest.raises(RuntimeError, match="Git commit"):
+        generator._commit()

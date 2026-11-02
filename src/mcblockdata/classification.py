@@ -62,16 +62,6 @@ VARIANTS = (
     ("_sign", "sign"),
     ("_carpet", "carpet"),
 )
-WEATHERING = {
-    "stone_bricks": {"moss": "mossy_stone_bricks", "crack": "cracked_stone_bricks"},
-    "stone_brick_stairs": {"moss": "mossy_stone_brick_stairs"},
-    "stone_brick_slab": {"moss": "mossy_stone_brick_slab"},
-    "stone_brick_wall": {"moss": "mossy_stone_brick_wall"},
-    "cobblestone": {"moss": "mossy_cobblestone"},
-    "cobblestone_stairs": {"moss": "mossy_cobblestone_stairs"},
-    "cobblestone_slab": {"moss": "mossy_cobblestone_slab"},
-    "cobblestone_wall": {"moss": "mossy_cobblestone_wall"},
-}
 
 
 def classify_blocks(blocks: dict, server_jar) -> dict:
@@ -105,7 +95,6 @@ def classify_blocks(blocks: dict, server_jar) -> dict:
                 )
                 family_name = full_id.partition(":")[2] if full_id else base
                 family_id = family_name
-                block["family"] = family_name
                 families[family_id][shape] = block_id
                 family_bases[family_id] = full_id
                 break
@@ -118,8 +107,12 @@ def classify_blocks(blocks: dict, server_jar) -> dict:
         full_id = family_bases[family_id]
         if full_id and full_id in blocks:
             family.setdefault("full", full_id)
+        if len(family) < 2:
+            continue
         for _, block_id in family.items():
             blocks[block_id]["family"] = family_id
+            if full_id:
+                blocks[block_id]["material"] = blocks[full_id]["material"]
     return {key: value for key, value in sorted(families.items()) if len(value) > 1}
 
 
@@ -139,12 +132,14 @@ def _shape_and_base(path: str) -> tuple[str, str]:
 
 
 def _full_candidates(base: str) -> tuple[str, ...]:
-    return (base, f"{base}s", f"{base}_planks")
+    return (base, f"{base}s", f"{base}_planks", f"{base}_block")
 
 
 def _material(path: str, tags: set[str]) -> str:
     tag_names = {tag.removeprefix("minecraft:") for tag in tags}
     tag_text = " ".join(tag_names)
+    if "sandstone" in path:
+        return "stone"
     if path in {"crimson_nylium", "warped_nylium", "soul_soil"}:
         return "soil"
     if path in {
@@ -440,21 +435,11 @@ def _sub_material(path: str) -> str | None:
 
 
 def _weathering(path: str, blocks: dict) -> dict[str, str]:
-    rules = WEATHERING.get(path, {})
     result = {}
-    for kind, target in rules.items():
-        block_id = f"minecraft:{target}"
-        if block_id not in blocks:
-            raise ValueError(f"weathering規則 {path!r} の参照先が存在しません: {block_id}")
-        result[kind] = block_id
-    if "moss" not in result and path.startswith("stone_brick"):
-        target = f"minecraft:mossy_{path}"
+    for kind, prefix in (("moss", "mossy"), ("crack", "cracked")):
+        target = f"minecraft:{prefix}_{path}"
         if target in blocks:
-            result["moss"] = target
-    if "crack" not in result and path.startswith("stone_brick"):
-        target = f"minecraft:cracked_{path}"
-        if target in blocks:
-            result["crack"] = target
+            result[kind] = target
     return result
 
 

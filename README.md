@@ -15,7 +15,9 @@ python -m mcblockdata build --all `
   --java-for "26.3=C:\Program Files\Eclipse Adoptium\jdk-25\bin\java.exe"
 ```
 
-`--all` は Mojang 公式 version manifest から server/client jar を取得して SHA-1 を検証し、Windows では `%LOCALAPPDATA%\mc-blueprint\cache\jars\`、他の OS では `~/.cache/mc-blueprint/jars/` に保存します。全版に面ごとの色を含めます。単版は `python -m mcblockdata build --version 1.21.11 --download --download-client` で生成できます。既存 jar は単版の `--server-jar <path>` と `--client-jar <path>` で指定できます。各 blockdata は生成時に `schema/blockdata.schema.json` で検証します。
+`--all` は Mojang 公式 version manifest から server/client jar を取得して SHA-1 を検証し、Windows では `%LOCALAPPDATA%\mc-blueprint\cache\jars\`、他の OS では `~/.cache/mc-blueprint/jars/` に保存します。全版に面ごとの色を含めます。単版は `python -m mcblockdata build --version 1.21.11 --download --download-client` で生成できます。既存 jar は単版の `--server-jar <path>` と `--client-jar <path>` で指定できます。各 blockdata は生成時にパッケージ内の `src/mcblockdata/blockdata.schema.json` で検証します。wheel からも `mcblockdata.generator.validate(data)` を利用できます。
+
+生成は本リポジトリの Git checkout から行います。`generator.commit` は実行ディレクトリによらず生成器自身の HEAD です。取得できない場合は生成を失敗させます。出力 JSON・チェックサム・commit ファイルの改行は LF です。
 
 ## リリース資産
 
@@ -54,6 +56,16 @@ mc-blueprint は blockdata JSON をリリースから取得し、`SHA256SUMS` �
 - 劣化の連鎖（苔・ひび）、状態ごとの発光・遮光、着色の種類とバイオームの着色表、描画の種類
 
 対応予定版：`1.21.11`、`26.1.2`、`26.2`、`26.3`。
+
+### 着色の形式と適用
+
+`faces` は着色を掛けていない素材色です。`tint: grass / foliage / water` では `tints[種類][バイオームID]`、`tint: fixed` では追加の `tints.fixed[名前空間付きブロックID]` を参照します。どちらの値も OKLab の `[L, a, b]` です。`tints.fixed` は formatVersion 1 に対する互換追加で、例は `{"minecraft:spruce_leaves": [L, a, b], "minecraft:birch_leaves": [L, a, b]}` です。
+
+素材色と乗算色をそれぞれ OKLab から**線形 sRGB** へ変換し、RGB の各成分を掛けます。OKLab の成分同士やガンマ符号化された sRGB 同士を掛けません。viewer はモデルの `tintindex >= 0` の面にだけ着色し、配色選択でも未着色部分と区別してください。固定色を `faces` に焼き込みません。
+
+形状・遮光の補正と着色面の確認は client jar の blockstate と継承済みモデルの `elements`・`tintindex` を使います。client jar を省略した生成ではモデルによる補正と面色抽出を行いません。モデルから色登録や特殊描画の有無は決まらないため、登録対象と固定値だけを `visuals.py` の出典付き規則で補います。
+
+根拠は [Minecraft Wiki のバイオーム着色](https://minecraft.wiki/w/Biome#Tint)、[モデルの tintindex](https://minecraft.wiki/w/Block_model)、[スイレンの葉の固定色](https://minecraft.wiki/w/Lily_Pad#Appearance) と公式 jar です。状態依存の着色（レッドストーン・茎）や落ち葉の dry_foliage 色表は現在の v1 契約に表現がなく、本追加では対象に含めません。
 
 ## 範囲
 

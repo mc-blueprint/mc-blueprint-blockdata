@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
@@ -56,11 +55,9 @@ def main(argv: list[str] | None = None) -> int:
                 write_diff(old, new)
             assets = [Path("dist") / f"blockdata-{version}.json" for version in supported]
             assets.extend(Path("dist").glob("blockdata-diff-*.json"))
-            commit = subprocess.run(
-                ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-            ).stdout.strip()
+            commit = generated[supported[0]]["generator"]["commit"]
             commit_file = Path("dist/generator.commit")
-            commit_file.write_text(f"{commit}\n", encoding="utf-8")
+            commit_file.write_text(f"{commit}\n", encoding="utf-8", newline="\n")
             assets.append(commit_file)
             write_checksums(assets)
             for version, data in generated.items():

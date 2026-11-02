@@ -5,8 +5,8 @@ from io import BytesIO
 import numpy as np
 from PIL import Image
 
-from mcblockdata.colors import extract_tints
-from mcblockdata.visuals import enrich_blocks, read_biomes
+from mcblockdata.colors import _rgb_color, extract_models, extract_tints
+from mcblockdata.visuals import FIXED_TINTS, enrich_blocks, read_biomes
 
 
 def test_visual_attributes_cover_dynamic_lights_tints_and_render():
@@ -170,3 +170,62 @@ def test_read_biomes_from_bundled_server_jar(tmp_path):
         archive.writestr("META-INF/versions/1.21.11/server-1.21.11.jar", nested.getvalue())
 
     assert read_biomes(jar) == {"minecraft:plains": {"temperature": 0.8}}
+
+
+def test_model_geometry_and_tint_registration_correct_visual_attributes(tmp_path):
+    # 自作の最小モデルで継承・面・着色を検証し、Mojangの資産は含めない。
+    jar = tmp_path / "client.jar"
+    untinted = ("oak_sapling", "azalea_leaves", "red_poplar_leaves", "cherry_leaves")
+    plants = ("short_grass", "fern", "golden_dandelion", "bush")
+    cubes = ("stone", "tinted_glass", "spruce_leaves", "birch_leaves", *untinted)
+    blocks = {
+        f"minecraft:{name}": {"properties": {}, "default": {}, "shape": "full",
+                             "material": "plant" if name in plants else "stone"}
+        for name in (*plants, *cubes, "redstone_wire", "lava_cauldron")
+    }
+    with zipfile.ZipFile(jar, "w") as archive:
+        for name, start, end in (("cube", [0, 0, 0], [16, 16, 16]),
+                                 ("cross", [0, 0, 8], [16, 16, 8])):
+            archive.writestr(f"assets/minecraft/models/block/test_{name}.json", json.dumps({
+                "elements": [{"from": start, "to": end, "faces": {
+                    direction: {"texture": "#test", "tintindex": 0}
+                    for direction in ("up", "down", "north", "south", "east", "west")
+                }}]
+            }))
+        for block_id in blocks:
+            name = block_id.partition(":")[2]
+            model = "cube" if name in cubes else "cross"
+            archive.writestr(f"assets/minecraft/models/block/{name}.json", json.dumps({
+                "parent": f"minecraft:block/test_{model}"
+            }))
+            archive.writestr(f"assets/minecraft/blockstates/{name}.json", json.dumps({
+                "variants": {"": {"model": f"minecraft:block/{name}"}}
+            }))
+    models = extract_models(jar, blocks)
+    # tintindexのある未登録モデルもnone、登録があっても着色面がなければnone。
+    models["minecraft:oak_sapling"]["tinted"] = False
+    enrich_blocks(blocks, models)
+    for name in plants:
+        assert blocks[f"minecraft:{name}"]["shape"] == "plant"
+        assert blocks[f"minecraft:{name}"]["light"][0]["opacity"] == 0
+    for name in untinted:
+        assert blocks[f"minecraft:{name}"]["tint"] == "none"
+    assert blocks["minecraft:bush"]["tint"] == "grass"
+    assert blocks["minecraft:redstone_wire"]["light"][0]["opacity"] == 0
+    assert blocks["minecraft:tinted_glass"]["light"][0]["opacity"] == 15
+    assert blocks["minecraft:stone"]["light"][0]["opacity"] == 15
+    assert blocks["minecraft:lava_cauldron"]["light"][0]["emission"] == 15
+    for name in ("spruce_leaves", "birch_leaves"):
+        assert blocks[f"minecraft:{name}"]["tint"] == "fixed"
+    assert FIXED_TINTS["spruce_leaves"] == 0x619961
+    assert FIXED_TINTS["birch_leaves"] == 0x80A755
+    assert _rgb_color(FIXED_TINTS["spruce_leaves"]) != _rgb_color(FIXED_TINTS["birch_leaves"])
+
+
+def test_special_renderers_include_signs_banners_heads_and_shulkers():
+    names = ("oak_sign", "oak_wall_hanging_sign", "white_banner", "black_wall_banner",
+             "player_head", "zombie_wall_head", "skeleton_skull", "wither_skeleton_wall_skull",
+             "shulker_box", "red_shulker_box", "chest", "red_bed")
+    blocks = {f"minecraft:{name}": {"shape": "full", "properties": {}} for name in names}
+    enrich_blocks(blocks)
+    assert all(block["render"] == "entity" for block in blocks.values())
