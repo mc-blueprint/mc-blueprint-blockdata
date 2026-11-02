@@ -1,8 +1,6 @@
 import json
 from zipfile import ZipFile
 
-import pytest
-
 from mcblockdata.classification import classify_blocks
 
 
@@ -201,13 +199,29 @@ def test_classifies_material_shape_family_and_weathering(tmp_path):
     assert all(block["material"] and block["shape"] for block in blocks.values())
 
 
-def test_rejects_missing_manual_weathering_target(tmp_path):
+def test_families_materials_and_existing_weathering_targets(tmp_path):
     jar = tmp_path / "server.jar"
     with ZipFile(jar, "w"):
         pass
 
-    with pytest.raises(ValueError, match="weathering規則"):
-        classify_blocks(
-            {"minecraft:stone_bricks": {"properties": {}, "default": {}}},
-            jar,
-        )
+    names = ["white_carpet", "stone_bricks"]
+    for base in ("quartz", "purpur", "sandstone", "red_sandstone"):
+        names.extend([base if "sandstone" in base else base + "_block",
+                      base + "_stairs", base + "_slab"])
+    cracked = ("nether_bricks", "deepslate_bricks", "deepslate_tiles",
+               "polished_blackstone_bricks")
+    for name in cracked:
+        names.extend([name, "cracked_" + name])
+    blocks = {f"minecraft:{name}": {"properties": {}, "default": {}} for name in names}
+    families = classify_blocks(blocks, jar)
+    assert "family" not in blocks["minecraft:white_carpet"]
+    assert "weathering" not in blocks["minecraft:stone_bricks"]
+    for base in ("quartz", "purpur", "sandstone", "red_sandstone"):
+        key = base if "sandstone" in base else base + "_block"
+        assert set(families[key]) == {"full", "stairs", "slab"}
+        materials = {blocks[block_id]["material"] for block_id in families[key].values()}
+        assert materials == ({"mineral"} if base == "quartz" else {"stone"})
+    for name in cracked:
+        assert blocks[f"minecraft:{name}"]["weathering"] == {
+            "crack": f"minecraft:cracked_{name}"
+        }

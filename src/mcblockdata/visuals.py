@@ -1,4 +1,4 @@
-"""光・バイオーム色・描画方式の手作業規則。"""
+"""モデルから得た特徴と、光・着色・描画方式の補完規則。"""
 
 from __future__ import annotations
 
@@ -27,6 +27,7 @@ EMISSION = {
     "verdant_froglight": 15,
     "pearlescent_froglight": 15,
     "lava": 15,
+    "lava_cauldron": 15,  # 根拠: https://minecraft.wiki/w/Cauldron#Lava
     "fire": 15,
     "soul_fire": 10,
     "campfire": 15,
@@ -92,7 +93,6 @@ ZERO_OPACITY = {
     "cave_air",
     "void_air",
     "glass",
-    "tinted_glass",
     "glass_pane",
     "iron_bars",
     "chain",
@@ -152,21 +152,32 @@ TINT_GRASS = {
     "sugar_cane",
     "pink_petals",
     "wildflowers",
+    "bush",
+    "potted_fern",
 }
-TINT_FOLIAGE = {"vine", "mangrove_leaves", "azalea_leaves", "flowering_azalea_leaves"}
-SPECIAL_LEAVES = ("_leaves",)
+# 根拠: https://minecraft.wiki/w/Biome#Tint （tintindexだけでは色の登録は分からない）。
+TINT_FOLIAGE = {
+    "vine", "oak_leaves", "jungle_leaves", "acacia_leaves", "dark_oak_leaves", "mangrove_leaves"
+}
+# 根拠: https://minecraft.wiki/w/Biome#Other_foliage と /Lily_Pad#Appearance。
+FIXED_TINTS = {"spruce_leaves": 0x619961, "birch_leaves": 0x80A755, "lily_pad": 0x208030}
 
 
-def enrich_blocks(blocks: dict[str, dict]) -> None:
-    """各ブロックへlight・tint・renderを追加する。"""
+def enrich_blocks(blocks: dict[str, dict], models: dict[str, dict] | None = None) -> None:
+    """光・着色・描画を追加し、モデルがある場合は形状と遮光も補正する。"""
     for block_id, block in blocks.items():
         name = block_id.partition(":")[2]
+        model = models.get(block_id) if models is not None else None
+        if model and model["cross"] and block["material"] == "plant":
+            block["shape"] = "plant"
         default_emission = 0 if "lit" in block.get("properties", {}) else EMISSION.get(name, 0)
-        opacity = _opacity(name, block["shape"])
+        opacity = _opacity(name, block["shape"], model)
         rules = [{"when": {}, "emission": default_emission, "opacity": opacity}]
         rules.extend(_state_light(name, block.get("properties", {}), opacity, block["shape"]))
         block["light"] = list(reversed(rules[1:])) + rules[:1]
-        block["tint"] = _tint(name)
+        block["tint"] = (
+            _tint(name) if model is None or model["tinted"] or name in FLUIDS else "none"
+        )
         block["render"] = (
             "fluid"
             if name in FLUIDS
@@ -178,7 +189,9 @@ def enrich_blocks(blocks: dict[str, dict]) -> None:
         )
 
 
-def _opacity(name: str, shape: str) -> int:
+def _opacity(name: str, shape: str, model: dict | None = None) -> int:
+    if name == "tinted_glass":
+        return 15
     if name.endswith("_chest"):
         return 0
     if name.endswith(("_candle", "_candle_cake", "_bed")):
@@ -201,6 +214,8 @@ def _opacity(name: str, shape: str) -> int:
     if name.endswith("_leaves"):
         return 1
     if name in ZERO_OPACITY or shape != "full":
+        return 0
+    if model is not None and not model["fullCube"]:
         return 0
     return 15
 
@@ -266,42 +281,10 @@ def _state_light(name: str, properties: dict, opacity: int, shape: str) -> list[
         )
     if shape == "slab":
         result.insert(0, {"when": {"type": "double"}, "emission": 0, "opacity": 15})
-    if "lit" in properties and name in {
-        "candle",
-        "white_candle",
-        "orange_candle",
-        "magenta_candle",
-        "light_blue_candle",
-        "yellow_candle",
-        "lime_candle",
-        "pink_candle",
-        "gray_candle",
-        "light_gray_candle",
-        "cyan_candle",
-        "purple_candle",
-        "blue_candle",
-        "brown_candle",
-        "green_candle",
-        "red_candle",
-        "black_candle",
-        "sea_pickle",
-    }:
-        return result
-    if "lit" in properties and name in {
-        "copper_bulb",
-        "exposed_copper_bulb",
-        "weathered_copper_bulb",
-        "oxidized_copper_bulb",
-        "waxed_copper_bulb",
-        "waxed_exposed_copper_bulb",
-        "waxed_weathered_copper_bulb",
-        "waxed_oxidized_copper_bulb",
-    }:
-        return [
-            {"when": {"lit": "true"}, "emission": EMISSION[name], "opacity": opacity},
-            {"when": {"lit": "false"}, "emission": 0, "opacity": opacity},
-        ]
-    return result
+    return [
+        rule for rule in result
+        if all(value in properties.get(key, []) for key, value in rule["when"].items())
+    ]
 
 
 def _tint(name: str) -> str:
@@ -309,26 +292,20 @@ def _tint(name: str) -> str:
         return "water"
     if name in TINT_GRASS:
         return "grass"
-    if name in {"birch_leaves", "spruce_leaves"}:
+    if name in FIXED_TINTS:
         return "fixed"
-    if (
-        name.endswith(SPECIAL_LEAVES)
-        or name in TINT_FOLIAGE
-        or name
-        in {
-            "oak_sapling",
-            "jungle_sapling",
-            "acacia_sapling",
-            "dark_oak_sapling",
-            "mangrove_propagule",
-        }
-    ):
+    if name in TINT_FOLIAGE:
         return "foliage"
     return "none"
 
 
 def _is_entity(name: str) -> bool:
-    return name.endswith(("_chest", "_bed")) or name == "chest"
+    # 根拠: https://minecraft.wiki/w/Block_entity （専用レンダラーを使うもの）。
+    return name.endswith((
+        "_chest", "_bed", "_sign", "_banner", "_head", "_skull", "_shulker_box"
+    )) or name in {
+        "chest", "shulker_box", "bell", "conduit", "decorated_pot", "enchanting_table"
+    }
 
 
 def read_biomes(server_jar: Path) -> dict[str, dict]:

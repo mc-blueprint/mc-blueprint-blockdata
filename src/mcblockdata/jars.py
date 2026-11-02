@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
 import urllib.request
 from pathlib import Path
 from zipfile import ZipFile
@@ -43,12 +44,18 @@ def _download_jar(version: str, side: str, dest_dir: Path | None = None) -> Path
     if jar_path.is_file() and _sha1(jar_path) == expected:
         return jar_path
 
-    temporary = jar_path.with_suffix(".jar.tmp")
+    with tempfile.NamedTemporaryFile(dir=dest_dir, prefix=f"{jar_path.name}.", delete=False) as f:
+        temporary = Path(f.name)
     try:
         urllib.request.urlretrieve(download["url"], temporary)
         if _sha1(temporary) != expected:
             raise ValueError(f"取得した{side} jarのSHA-1が一致しません: {version}")
-        temporary.replace(jar_path)
+        try:
+            temporary.replace(jar_path)
+        except PermissionError:
+            # Windowsでは同時replaceが拒否される。先行取得の検証済みjarだけ再利用する。
+            if not jar_path.is_file() or _sha1(jar_path) != expected:
+                raise
     finally:
         temporary.unlink(missing_ok=True)
     return jar_path

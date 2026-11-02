@@ -79,6 +79,43 @@ def _distribution(pixels: np.ndarray) -> dict[str, list[float]]:
     }
 
 
+def extract_models(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]:
+    """既定状態の継承済みモデルから立方体・交差面・着色面の有無を返す。"""
+    result = {}
+    with zipfile.ZipFile(client_jar) as archive:
+        cache = {}
+        names = set(archive.namelist())
+        for block_id, block in blocks.items():
+            path = _resource(block_id, "blockstates") + ".json"
+            if path not in names:
+                continue
+            state = json.loads(archive.read(path))
+            elements = [
+                element
+                for model_id in _state_models(state, block["default"])
+                for element in _model(archive, model_id, cache).get("elements", [])
+            ]
+            result[block_id] = {
+                "fullCube": any(
+                    element.get("from") == [0, 0, 0]
+                    and element.get("to") == [16, 16, 16]
+                    and not element.get("rotation")
+                    and len(element.get("faces", {})) == 6
+                    for element in elements
+                ),
+                "cross": bool(elements) and all(
+                    any(a == b for a, b in zip(element["from"], element["to"], strict=True))
+                    for element in elements
+                ),
+                "tinted": any(
+                    face.get("tintindex", -1) >= 0
+                    for element in elements
+                    for face in element.get("faces", {}).values()
+                ),
+            }
+    return result
+
+
 def extract_faces(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]:
     """blockstate/model/textureをたどり、各block IDの面別OKLab分位点を返す。"""
     faces_by_block = {}

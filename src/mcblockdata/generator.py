@@ -5,16 +5,17 @@ from __future__ import annotations
 import json
 import subprocess
 import tempfile
+from importlib.resources import files
 from pathlib import Path
 
 from mcblockdata import __version__
 from mcblockdata.classification import classify_blocks
-from mcblockdata.colors import extract_faces, extract_tints
+from mcblockdata.colors import _rgb_color, extract_faces, extract_models, extract_tints
 from mcblockdata.reports import convert_blocks, read_data_version
-from mcblockdata.visuals import enrich_blocks, read_biomes
+from mcblockdata.visuals import FIXED_TINTS, enrich_blocks, read_biomes
 
 REPOSITORY = "mc-blueprint/mc-blueprint-blockdata"
-SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema" / "blockdata.schema.json"
+SCHEMA_PATH = files("mcblockdata").joinpath("blockdata.schema.json")
 
 
 def run_data_generator(server_jar: Path, output_dir: Path, java: str = "java") -> Path:
@@ -46,21 +47,29 @@ def build_version(
     version: str, server_jar: Path, java: str = "java", client_jar: Path | None = None
 ) -> dict:
     """server jarから版データを生成する。client jarを渡すと面色も抽出する。"""
+    commit = _commit()
     with tempfile.TemporaryDirectory(prefix=f"mcblockdata-{version}-") as temporary:
         blocks_json = run_data_generator(server_jar, Path(temporary), java)
         blocks = convert_blocks(blocks_json)
     families = classify_blocks(blocks, server_jar)
-    enrich_blocks(blocks)
-    tints = {}
+    models = extract_models(client_jar, blocks) if client_jar is not None else None
+    enrich_blocks(blocks, models)
+    tints = {
+        "fixed": {
+            block_id: _rgb_color(FIXED_TINTS[block_id.partition(":")[2]])
+            for block_id, block in blocks.items()
+            if block["tint"] == "fixed"
+        }
+    }
     if client_jar is not None:
         for block_id, faces in extract_faces(client_jar, blocks).items():
             blocks[block_id]["faces"] = faces
-        tints = extract_tints(client_jar, read_biomes(server_jar))
+        tints.update(extract_tints(client_jar, read_biomes(server_jar)))
     data = {
         "formatVersion": 1,
         "minecraftVersion": version,
         "dataVersion": read_data_version(server_jar),
-        "generator": {"repository": REPOSITORY, "version": __version__, "commit": _commit()},
+        "generator": {"repository": REPOSITORY, "version": __version__, "commit": commit},
         "blocks": blocks,
         "families": families,
         "tints": tints,
@@ -68,12 +77,14 @@ def build_version(
     validate(data)
     output = Path("dist") / f"blockdata-{version}.json"
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    output.write_text(
+        json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
     return data
 
 
 def validate(data: dict) -> None:
-    """blockdata v1 JSON Schemaでデータを検証する。"""
+    """v1スキーマと参照・状態条件を検証し、不整合時はValueErrorを送出する。"""
     from jsonschema import Draft202012Validator, ValidationError
 
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -92,6 +103,17 @@ def validate(data: dict) -> None:
             if block_ids[block_id].get("family") != family:
                 raise ValueError(f"family {family!r} とブロック {block_id} の属性が一致しません")
     for block_id, block in block_ids.items():
+        family = block.get("family")
+        if family is not None and block_id not in data["families"].get(family, {}).values():
+            raise ValueError(f"block {block_id} のfamily参照が一致しません: {family}")
+        for rule in block["light"]:
+            for name, value in rule["when"].items():
+                if value not in block["properties"].get(name, []):
+                    raise ValueError(f"block {block_id} のlight条件が実在しません: {name}={value}")
+        if not any(not rule["when"] for rule in block["light"]):
+            raise ValueError(f"block {block_id} のlightに既定規則がありません")
+        if block["tint"] == "fixed" and block_id not in data["tints"].get("fixed", {}):
+            raise ValueError(f"block {block_id} の固定着色がありません")
         for target in block.get("weathering", {}).values():
             if target not in block_ids:
                 raise ValueError(f"block {block_id} のweathering先が存在しません: {target}")
@@ -108,6 +130,7 @@ def write_checksums(paths: list[Path], output: Path = Path("dist/SHA256SUMS")) -
             for path in sorted(paths, key=lambda item: item.name)
         ),
         encoding="utf-8",
+        newline="\n",
     )
 
 
@@ -140,14 +163,21 @@ def write_diff(old_version: str, new_version: str) -> Path:
         },
     }
     path = Path("dist", f"blockdata-diff-{old_version}-{new_version}.json")
-    path.write_text(json.dumps(changes, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(changes, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n"
+    )
     return path
 
 
 def _commit() -> str:
+    root = Path(__file__).resolve().parents[2]
+    if not (root / ".git").exists():
+        raise RuntimeError(
+            "生成器のGit commitを取得できません。blockdataのcheckoutから生成してください"
+        )
     try:
         return subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+            ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True
         ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError("生成器のGit commitを取得できません") from exc
