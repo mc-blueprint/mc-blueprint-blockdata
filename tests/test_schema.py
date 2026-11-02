@@ -5,7 +5,7 @@ from jsonschema import Draft202012Validator
 from mcblockdata.generator import SCHEMA_PATH
 
 
-def test_schema_accepts_base_data_and_optional_followup_attributes():
+def test_schema_accepts_classified_data():
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     data = {
         "formatVersion": 1,
@@ -17,10 +17,17 @@ def test_schema_accepts_base_data_and_optional_followup_attributes():
             "commit": "abc123",
         },
         "blocks": {
-            "minecraft:stone": {"properties": {}, "default": {}},
+            "minecraft:stone": {
+                "properties": {},
+                "default": {},
+                "material": "stone",
+                "shape": "full",
+            },
             "minecraft:grass_block": {
                 "properties": {"snowy": ["true", "false"]},
                 "default": {"snowy": "false"},
+                "material": "soil",
+                "shape": "full",
                 "tint": "grass",
                 "faces": {
                     "top": {
@@ -33,6 +40,7 @@ def test_schema_accepts_base_data_and_optional_followup_attributes():
                 },
             },
         },
+        "families": {},
     }
 
     Draft202012Validator(schema).validate(data)
