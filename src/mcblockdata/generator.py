@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 from mcblockdata import __version__
+from mcblockdata.colors import extract_faces
 from mcblockdata.reports import convert_blocks, read_data_version
 
 REPOSITORY = "mc-blueprint/mc-blueprint-blockdata"
@@ -39,11 +40,16 @@ def run_data_generator(server_jar: Path, output_dir: Path, java: str = "java") -
     return blocks_json
 
 
-def build_version(version: str, server_jar: Path, java: str = "java") -> dict:
-    """1版分のデータを生成し、distへ書き出して生成データを返す。"""
+def build_version(
+    version: str, server_jar: Path, java: str = "java", client_jar: Path | None = None
+) -> dict:
+    """server jarから版データを生成する。client jarを渡すと面色も抽出する。"""
     with tempfile.TemporaryDirectory(prefix=f"mcblockdata-{version}-") as temporary:
         blocks_json = run_data_generator(server_jar, Path(temporary), java)
         blocks = convert_blocks(blocks_json)
+    if client_jar is not None:
+        for block_id, faces in extract_faces(client_jar, blocks).items():
+            blocks[block_id]["faces"] = faces
     data = {
         "formatVersion": 1,
         "minecraftVersion": version,
