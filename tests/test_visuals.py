@@ -229,3 +229,15 @@ def test_special_renderers_include_signs_banners_heads_and_shulkers():
     blocks = {f"minecraft:{name}": {"shape": "full", "properties": {}} for name in names}
     enrich_blocks(blocks)
     assert all(block["render"] == "entity" for block in blocks.values())
+
+
+def test_ice_and_translucent_full_models_keep_their_light_properties():
+    expected = {"ice": 1, "packed_ice": 15, "blue_ice": 15,
+                "powder_snow": 0, "mangrove_roots": 1}
+    blocks = {f"minecraft:{name}": {"shape": "full", "properties": {}, "material": "ice_snow"}
+              for name in expected}
+    models = {block_id: {"fullCube": True, "cross": False, "tinted": False}
+              for block_id in blocks}
+    enrich_blocks(blocks, models)
+    for name, opacity in expected.items():
+        assert blocks[f"minecraft:{name}"]["light"][-1]["opacity"] == opacity

@@ -86,7 +86,8 @@ EMISSION = {
     "sculk_catalyst": 6,
 }
 
-# Wiki「Light」: 不透過の立方体は15、ガラス/カーペットは0、葉/水/氷は1。
+# Wiki「Light」: 不透過の立方体は15、ガラス/カーペットは0、葉/水/通常の氷は1。
+# packed_ice・blue_iceは不透過: minecraft.wiki/w/Packed_Ice, /Blue_Ice。
 # 半ブロック・階段などはfull cubeでなく追加遮光しないため0とする。
 ZERO_OPACITY = {
     "air",
@@ -98,6 +99,7 @@ ZERO_OPACITY = {
     "chain",
     "carpet",
     "snow",
+    "powder_snow",  # 根拠: minecraft.wiki/w/Powder_Snow （モデルは立方体だが透光）。
     "torch",
     "wall_torch",
     "redstone_torch",
@@ -127,8 +129,6 @@ ZERO_OPACITY = {
     "oak_bed",
     "red_bed",
     "ice",
-    "packed_ice",
-    "blue_ice",
     "frosted_ice",
     "water",
     "bubble_column",
@@ -203,12 +203,11 @@ def _opacity(name: str, shape: str, model: dict | None = None) -> int:
         "bubble_column",
         "lava",
         "ice",
-        "packed_ice",
-        "blue_ice",
         "frosted_ice",
         "slime_block",
         "honey_block",
         "cobweb",
+        "mangrove_roots",  # 根拠: minecraft.wiki/w/Mangrove_Roots （Java版は遮光1）。
     }:
         return 1
     if name.endswith("_leaves"):

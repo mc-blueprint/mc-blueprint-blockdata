@@ -83,3 +83,13 @@ def test_fixed_colors_are_optional_but_required_for_fixed_blocks(data):
     data["tints"]["fixed"]["minecraft:stone"] = [0.6, 0.1]
     with pytest.raises(ValueError):
         validate(data)
+
+
+def test_layer_distributions_are_optional_and_validate_like_oklab(data):
+    face = data["blocks"]["minecraft:grass_block"]["faces"]["top"]
+    face["tintedOklab"] = face["oklab"]
+    face["untintedOklab"] = face["oklab"]
+    validate(data)
+    face["tintedOklab"] = {"L": [0.5], "a": [0], "b": [0]}
+    with pytest.raises(ValueError):
+        validate(data)
