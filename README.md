@@ -73,6 +73,8 @@ Materialize は `tintedOklab` にだけブロックの乗算色を適用し、`u
 
 形状・遮光の補正と着色面の確認は client jar の blockstate と継承済みモデルの `elements`・`tintindex` を使います。client jar を省略した生成ではモデルによる補正と面色抽出を行いません。モデルから色登録や特殊描画の有無は決まらないため、登録対象と固定値だけを `visuals.py` の出典付き規則で補います。
 
+面色の `top`・`side`・`bottom` は、既定状態の variant / multipart の `x`・`y` 回転を適用した後の向きです。立方体の外周6面の判定にも同じ回転計算を使います。
+
 根拠は [Minecraft Wiki のバイオーム着色](https://minecraft.wiki/w/Biome#Tint)、[モデルの tintindex](https://minecraft.wiki/w/Block_model)、[スイレンの葉の固定色](https://minecraft.wiki/w/Lily_Pad#Appearance) と公式 jar です。状態依存の着色（レッドストーン・茎）や落ち葉の dry_foliage 色表は現在の v1 契約に表現がなく、本追加では対象に含めません。
 
 ## 範囲

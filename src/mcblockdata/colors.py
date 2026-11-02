@@ -13,6 +13,11 @@ from PIL import Image
 
 QUANTILES = (0.05, 0.25, 0.5, 0.75, 0.95)
 FACES = ("top", "side", "bottom")
+NORMALS = {
+    "west": (-1, 0, 0), "east": (1, 0, 0),
+    "down": (0, -1, 0), "up": (0, 1, 0),
+    "north": (0, 0, -1), "south": (0, 0, 1),
+}
 
 
 def _resource(value: str, directory: str) -> str:
@@ -63,36 +68,36 @@ def _state_models(state: dict, defaults: dict[str, str]) -> list[dict]:
     return selected
 
 
+def _rotate(normal: tuple[int, int, int], part: dict) -> tuple[int, int, int]:
+    """blockstateの回転を法線に適用する。Java版と同じ負のx、負のyの順。"""
+    x, y, z = normal
+    for _ in range(part.get("x", 0) // 90):
+        y, z = z, -y
+    for _ in range(part.get("y", 0) // 90):
+        x, z = -z, x
+    return x, y, z
+
+
 def _cube_faces(element: dict, part: dict) -> set[tuple[int, int, int]]:
     """ブロック状態の90度回転を反映し、外周全体を覆う面の法線を返す。"""
     if element.get("rotation", {}).get("angle", 0):
         return set()
     start, end = element["from"], element["to"]
-    directions = {
-        "west": (-1, 0, 0), "east": (1, 0, 0),
-        "down": (0, -1, 0), "up": (0, 1, 0),
-        "north": (0, 0, -1), "south": (0, 0, 1),
-    }
     covered = set()
     for face in element.get("faces", {}):
-        normal = directions[face]
+        normal = NORMALS[face]
         axis = next(i for i, value in enumerate(normal) if value)
         if (start[axis] if normal[axis] < 0 else end[axis]) != (0 if normal[axis] < 0 else 16):
             continue
         if any(start[i] != 0 or end[i] != 16 for i in range(3) if i != axis):
             continue
-        x, y, z = normal
-        for _ in range(part.get("x", 0) // 90):
-            y, z = -z, y
-        for _ in range(part.get("y", 0) // 90):
-            x, z = z, -x
-        covered.add((x, y, z))
+        covered.add(_rotate(normal, part))
     return covered
 
 
-def _face(direction: str, data: dict) -> str:
-    cullface = data.get("cullface", direction)
-    return "top" if cullface == "up" else "bottom" if cullface == "down" else "side"
+def _face(direction: str, data: dict, part: dict) -> str:
+    _, y, _ = _rotate(NORMALS[data.get("cullface", direction)], part)
+    return "top" if y == 1 else "bottom" if y == -1 else "side"
 
 
 def _pixels(image: Image.Image) -> np.ndarray:
@@ -193,7 +198,7 @@ def extract_faces(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]:
                             layer = (
                                 "tintedOklab" if face_data.get("tintindex", -1) >= 0 else "oklab"
                             )
-                            by_face[_face(direction, face_data), layer].append(pixels)
+                            by_face[_face(direction, face_data, part), layer].append(pixels)
             if by_face:
                 faces = {}
                 for face in FACES:
