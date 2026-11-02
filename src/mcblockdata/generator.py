@@ -9,8 +9,9 @@ from pathlib import Path
 
 from mcblockdata import __version__
 from mcblockdata.classification import classify_blocks
-from mcblockdata.colors import extract_faces
+from mcblockdata.colors import extract_faces, extract_tints
 from mcblockdata.reports import convert_blocks, read_data_version
+from mcblockdata.visuals import enrich_blocks, read_biomes
 
 REPOSITORY = "mc-blueprint/mc-blueprint-blockdata"
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schema" / "blockdata.schema.json"
@@ -48,16 +49,21 @@ def build_version(
     with tempfile.TemporaryDirectory(prefix=f"mcblockdata-{version}-") as temporary:
         blocks_json = run_data_generator(server_jar, Path(temporary), java)
         blocks = convert_blocks(blocks_json)
+    families = classify_blocks(blocks, server_jar)
+    enrich_blocks(blocks)
+    tints = {}
     if client_jar is not None:
         for block_id, faces in extract_faces(client_jar, blocks).items():
             blocks[block_id]["faces"] = faces
+        tints = extract_tints(client_jar, read_biomes(server_jar))
     data = {
         "formatVersion": 1,
         "minecraftVersion": version,
         "dataVersion": read_data_version(server_jar),
         "generator": {"repository": REPOSITORY, "version": __version__, "commit": _commit()},
         "blocks": blocks,
-        "families": classify_blocks(blocks, server_jar),
+        "families": families,
+        "tints": tints,
     }
     validate(data)
     output = Path("dist") / f"blockdata-{version}.json"

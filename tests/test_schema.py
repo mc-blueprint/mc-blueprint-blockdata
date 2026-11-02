@@ -22,6 +22,9 @@ def test_schema_accepts_classified_data():
                 "default": {},
                 "material": "stone",
                 "shape": "full",
+                "tint": "none",
+                "light": [{"when": {}, "emission": 0, "opacity": 15}],
+                "render": "model",
             },
             "minecraft:grass_block": {
                 "properties": {"snowy": ["true", "false"]},
@@ -29,6 +32,8 @@ def test_schema_accepts_classified_data():
                 "material": "soil",
                 "shape": "full",
                 "tint": "grass",
+                "light": [{"when": {}, "emission": 0, "opacity": 15}],
+                "render": "model",
                 "faces": {
                     "top": {
                         "oklab": {
@@ -41,6 +46,7 @@ def test_schema_accepts_classified_data():
             },
         },
         "families": {},
+        "tints": {"grass": {}, "foliage": {}, "water": {}},
     }
 
     Draft202012Validator(schema).validate(data)
