@@ -20,24 +20,33 @@ def cache_dir() -> Path:
 
 
 def download_server_jar(version: str, dest_dir: Path | None = None) -> Path:
-    """Mojang公式manifestからserver jarを取得し、SHA-1検証してキャッシュする。"""
+    return _download_jar(version, "server", dest_dir)
+
+
+def download_client_jar(version: str, dest_dir: Path | None = None) -> Path:
+    """Mojang公式manifestからclient jarを取得し、SHA-1検証してキャッシュする。"""
+    return _download_jar(version, "client", dest_dir)
+
+
+def _download_jar(version: str, side: str, dest_dir: Path | None = None) -> Path:
+    """Mojang公式manifestから指定側のjarを取得し、SHA-1検証してキャッシュする。"""
     dest_dir = dest_dir or cache_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
-    jar_path = dest_dir / f"server-{version}.jar"
+    jar_path = dest_dir / f"{side}-{version}.jar"
     manifest = _fetch_json(VERSION_MANIFEST_URL)
     entry = next((item for item in manifest["versions"] if item["id"] == version), None)
     if entry is None:
         raise ValueError(f"Mojang version manifestに版 {version!r} がありません")
-    server = _fetch_json(entry["url"])["downloads"]["server"]
-    expected = server["sha1"]
+    download = _fetch_json(entry["url"])["downloads"][side]
+    expected = download["sha1"]
     if jar_path.is_file() and _sha1(jar_path) == expected:
         return jar_path
 
     temporary = jar_path.with_suffix(".jar.tmp")
     try:
-        urllib.request.urlretrieve(server["url"], temporary)
+        urllib.request.urlretrieve(download["url"], temporary)
         if _sha1(temporary) != expected:
-            raise ValueError(f"取得したserver jarのSHA-1が一致しません: {version}")
+            raise ValueError(f"取得した{side} jarのSHA-1が一致しません: {version}")
         temporary.replace(jar_path)
     finally:
         temporary.unlink(missing_ok=True)

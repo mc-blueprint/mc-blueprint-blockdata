@@ -98,7 +98,7 @@
           "type": "object",
           "required": ["L", "a", "b"],
           "properties": {
-            "L": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": 0, "maximum": 1}},
+            "L": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": 0, "maximum": 1.00001}},
             "a": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": -0.4, "maximum": 0.4}},
             "b": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": -0.4, "maximum": 0.4}}
           },

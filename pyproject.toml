@@ -9,7 +9,7 @@ description = "Minecraft Java Edition block data generator for mc-blueprint"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = ["jsonschema>=4.23,<5"]
+dependencies = ["colour-science>=0.4.6,<0.5", "jsonschema>=4.23,<5", "numpy>=2,<3", "pillow>=10,<13"]
 
 [project.scripts]
 mcblockdata = "mcblockdata.cli:main"

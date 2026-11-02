@@ -25,7 +25,7 @@ def test_schema_accepts_base_data_and_optional_followup_attributes():
                 "faces": {
                     "top": {
                         "oklab": {
-                            "L": [0.5, 0.5, 0.5, 0.5, 0.5],
+                            "L": [0.5, 0.5, 0.5, 0.5, 1.000001735347926],
                             "a": [0.0, 0.0, 0.0, 0.0, 0.0],
                             "b": [0.0, 0.0, 0.0, 0.0, 0.0],
                         }

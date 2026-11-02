@@ -44,3 +44,23 @@ def test_download_server_jar_rejects_invalid_hash(tmp_path, monkeypatch):
 
     assert not (tmp_path / "server-1.21.11.jar").exists()
     assert not (tmp_path / "server-1.21.11.jar.tmp").exists()
+
+
+def test_download_client_jar_uses_client_manifest_entry(tmp_path, monkeypatch):
+    content = b"official client jar"
+    sha1 = hashlib.sha1(content).hexdigest()
+    monkeypatch.setattr(
+        jars,
+        "_fetch_json",
+        lambda url: {"versions": [{"id": "1.21.11", "url": "version"}]}
+        if "manifest" in url
+        else {"downloads": {"client": {"url": "client.jar", "sha1": sha1}}},
+    )
+    monkeypatch.setattr(
+        jars.urllib.request, "urlretrieve", lambda url, path: path.write_bytes(content)
+    )
+
+    path = jars.download_client_jar("1.21.11", tmp_path)
+
+    assert path.name == "client-1.21.11.jar"
+    assert path.read_bytes() == content
