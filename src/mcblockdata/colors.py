@@ -39,19 +39,55 @@ def _model(archive: zipfile.ZipFile, model_id: str, cache: dict[str, dict]) -> d
     return model
 
 
-def _state_models(state: dict, defaults: dict[str, str]) -> list[str]:
+def _matches(when: dict, defaults: dict[str, str]) -> bool:
+    if "OR" in when:
+        return any(_matches(part, defaults) for part in when["OR"])
+    if "AND" in when:
+        return all(_matches(part, defaults) for part in when["AND"])
+    return all(defaults.get(key) in value.split("|") for key, value in when.items())
+
+
+def _state_models(state: dict, defaults: dict[str, str]) -> list[dict]:
     selected = []
     for key, value in state.get("variants", {}).items():
         requirements = dict(part.split("=", 1) for part in key.split(",") if part)
-        if all(defaults.get(name) == expected for name, expected in requirements.items()):
+        if _matches(requirements, defaults):
             choices = value if isinstance(value, list) else [value]
-            selected.extend(choice["model"] for choice in choices)
+            selected.extend(choices)
     if selected:
         return selected
     for part in state.get("multipart", []):
-        choices = part["apply"] if isinstance(part["apply"], list) else [part["apply"]]
-        selected.extend(choice["model"] for choice in choices)
+        if _matches(part.get("when", {}), defaults):
+            choices = part["apply"] if isinstance(part["apply"], list) else [part["apply"]]
+            selected.extend(choices)
     return selected
+
+
+def _cube_faces(element: dict, part: dict) -> set[tuple[int, int, int]]:
+    """ブロック状態の90度回転を反映し、外周全体を覆う面の法線を返す。"""
+    if element.get("rotation", {}).get("angle", 0):
+        return set()
+    start, end = element["from"], element["to"]
+    directions = {
+        "west": (-1, 0, 0), "east": (1, 0, 0),
+        "down": (0, -1, 0), "up": (0, 1, 0),
+        "north": (0, 0, -1), "south": (0, 0, 1),
+    }
+    covered = set()
+    for face in element.get("faces", {}):
+        normal = directions[face]
+        axis = next(i for i, value in enumerate(normal) if value)
+        if (start[axis] if normal[axis] < 0 else end[axis]) != (0 if normal[axis] < 0 else 16):
+            continue
+        if any(start[i] != 0 or end[i] != 16 for i in range(3) if i != axis):
+            continue
+        x, y, z = normal
+        for _ in range(part.get("x", 0) // 90):
+            y, z = -z, y
+        for _ in range(part.get("y", 0) // 90):
+            x, z = z, -x
+        covered.add((x, y, z))
+    return covered
 
 
 def _face(direction: str, data: dict) -> str:
@@ -90,20 +126,16 @@ def extract_models(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]
             if path not in names:
                 continue
             state = json.loads(archive.read(path))
-            elements = [
-                element
-                for model_id in _state_models(state, block["default"])
-                for element in _model(archive, model_id, cache).get("elements", [])
-            ]
+            elements = []
+            covered = set()
+            for part in _state_models(state, block["default"]):
+                for element in _model(archive, part["model"], cache).get("elements", []):
+                    elements.append(element)
+                    covered.update(_cube_faces(element, part))
+            full_cube = len(covered) == 6
             result[block_id] = {
-                "fullCube": any(
-                    element.get("from") == [0, 0, 0]
-                    and element.get("to") == [16, 16, 16]
-                    and not element.get("rotation")
-                    and len(element.get("faces", {})) == 6
-                    for element in elements
-                ),
-                "cross": bool(elements) and all(
+                "fullCube": full_cube,
+                "cross": bool(elements) and not full_cube and all(
                     any(a == b for a, b in zip(element["from"], element["to"], strict=True))
                     for element in elements
                 ),
@@ -117,7 +149,7 @@ def extract_models(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]
 
 
 def extract_faces(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]:
-    """blockstate/model/textureをたどり、各block IDの面別OKLab分位点を返す。"""
+    """既定モデルの面色を返す。oklabを保持し、着色面は層別の分位点も付加する。"""
     faces_by_block = {}
     with zipfile.ZipFile(client_jar) as archive:
         names = set(archive.namelist())
@@ -134,8 +166,8 @@ def extract_faces(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]:
                 continue
             state = json.loads(archive.read(state_name))
             by_face = defaultdict(list)
-            for model_id in _state_models(state, info["default"]):
-                model = _model(archive, model_id, model_cache)
+            for part in _state_models(state, info["default"]):
+                model = _model(archive, part["model"], model_cache)
                 textures = {
                     key: value["sprite"] if isinstance(value, dict) else value
                     for key, value in model.get("textures", {}).items()
@@ -158,13 +190,24 @@ def extract_faces(client_jar: Path, blocks: dict[str, dict]) -> dict[str, dict]:
                         with archive.open(texture_name) as stream, Image.open(stream) as image:
                             pixels = _pixels(image)
                         if len(pixels):
-                            by_face[_face(direction, face_data)].append(pixels)
+                            layer = (
+                                "tintedOklab" if face_data.get("tintindex", -1) >= 0 else "oklab"
+                            )
+                            by_face[_face(direction, face_data), layer].append(pixels)
             if by_face:
-                faces_by_block[block_id] = {
-                    face: {"oklab": _distribution(np.concatenate(by_face[face]))}
-                    for face in FACES
-                    if by_face[face]
-                }
+                faces = {}
+                for face in FACES:
+                    plain = by_face[face, "oklab"]
+                    tinted = by_face[face, "tintedOklab"]
+                    if not plain and not tinted:
+                        continue
+                    colors = {"oklab": _distribution(np.concatenate(plain + tinted))}
+                    if tinted:
+                        colors["tintedOklab"] = _distribution(np.concatenate(tinted))
+                        if plain:
+                            colors["untintedOklab"] = _distribution(np.concatenate(plain))
+                    faces[face] = colors
+                faces_by_block[block_id] = faces
     return faces_by_block
 
 

@@ -102,15 +102,28 @@
       "required": ["oklab"],
       "properties": {
         "oklab": {
-          "type": "object",
-          "required": ["L", "a", "b"],
-          "properties": {
-            "L": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": 0, "maximum": 1.00001}},
-            "a": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": -0.4, "maximum": 0.4}},
-            "b": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": -0.4, "maximum": 0.4}}
-          },
-          "additionalProperties": false
+          "$ref": "#/$defs/oklab",
+          "description": "互換用の素材色分位点。着色層と未着色層を合わせた値。"
+        },
+        "tintedOklab": {
+          "$ref": "#/$defs/oklab",
+          "description": "tintindex >= 0の層だけの素材色分位点。乗算色を線形sRGBで適用する。"
+        },
+        "untintedOklab": {
+          "$ref": "#/$defs/oklab",
+          "description": "tintedOklabと共存する未着色層の分位点。着色を掛けない。"
         }
+      },
+      "dependentRequired": {"untintedOklab": ["tintedOklab"]},
+      "additionalProperties": false
+    },
+    "oklab": {
+      "type": "object",
+      "required": ["L", "a", "b"],
+      "properties": {
+        "L": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": 0, "maximum": 1.00001}},
+        "a": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": -0.4, "maximum": 0.4}},
+        "b": {"$ref": "#/$defs/percentiles", "items": {"type": "number", "minimum": -0.4, "maximum": 0.4}}
       },
       "additionalProperties": false
     },

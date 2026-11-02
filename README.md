@@ -63,6 +63,14 @@ mc-blueprint は blockdata JSON をリリースから取得し、`SHA256SUMS` �
 
 素材色と乗算色をそれぞれ OKLab から**線形 sRGB** へ変換し、RGB の各成分を掛けます。OKLab の成分同士やガンマ符号化された sRGB 同士を掛けません。viewer はモデルの `tintindex >= 0` の面にだけ着色し、配色選択でも未着色部分と区別してください。固定色を `faces` に焼き込みません。
 
+`faces.<面>` に、formatVersion 1 の互換追加として `tintedOklab` と `untintedOklab` を提供します。いずれも `oklab` と同じ `{L: [5点], a: [5点], b: [5点]}`（5/25/50/75/95パーセンタイル）で、着色前の素材色です。
+
+- `oklab`：従来どおり、全層の不透明画素を合わせた分位点を保持します。
+- `tintedOklab`：`tintindex >= 0` の層に不透明画素がある場合だけ出力します。
+- `untintedOklab`：着色層と未着色層の両方がある面で、未着色層の分位点を出力します。
+
+Materialize は `tintedOklab` にだけブロックの乗算色を適用し、`untintedOklab` はそのまま扱います。`tintedOklab` があり `untintedOklab` がなければ全層が着色対象、両方なければ `oklab` だけを未着色として扱います。`tint: none` のブロックにはモデルの `tintindex` にかかわらず着色しません。たとえば `grass_block` の側面には両方、上面には `tintedOklab` だけ、底面には追加フィールドを出しません。層別フィールドに対応しない既存利用側は、従来の `oklab` を引き続き読めます。旧生成物には層別フィールドがないため、この判定には再生成したデータを使用してください。
+
 形状・遮光の補正と着色面の確認は client jar の blockstate と継承済みモデルの `elements`・`tintindex` を使います。client jar を省略した生成ではモデルによる補正と面色抽出を行いません。モデルから色登録や特殊描画の有無は決まらないため、登録対象と固定値だけを `visuals.py` の出典付き規則で補います。
 
 根拠は [Minecraft Wiki のバイオーム着色](https://minecraft.wiki/w/Biome#Tint)、[モデルの tintindex](https://minecraft.wiki/w/Block_model)、[スイレンの葉の固定色](https://minecraft.wiki/w/Lily_Pad#Appearance) と公式 jar です。状態依存の着色（レッドストーン・茎）や落ち葉の dry_foliage 色表は現在の v1 契約に表現がなく、本追加では対象に含めません。
