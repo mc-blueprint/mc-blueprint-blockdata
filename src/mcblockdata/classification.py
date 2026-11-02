@@ -126,7 +126,9 @@ def classify_blocks(blocks: dict, server_jar) -> dict:
 def _shape_and_base(path: str) -> tuple[str, str]:
     if path in {"water", "lava"}:
         return "fluid", path
-    if path.endswith(("_leaves", "_sapling", "_flower", "_tulip", "_orchid", "_mushroom")):
+    if path.endswith(
+        ("_leaves", "_sapling", "_flower", "_tulip", "_orchid", "_mushroom", "_shrub")
+    ):
         return "plant", path
     for suffix, shape in VARIANTS:
         if path.endswith(suffix):
@@ -199,7 +201,7 @@ def _material(path: str, tags: set[str]) -> str:
         return "metal"
     if path.startswith("sculk") or path.endswith("_shulker_box") or path == "shulker_box":
         return "mineral"
-    if path in {"water", "lava", "bubble_column", "water_cauldron"} or "fluids" in tag_text:
+    if path in {"water", "lava", "bubble_column", "water_cauldron"} or "fluids" in tag_names:
         return "liquid"
     if path.endswith(("_banner", "_wall_banner", "_bed")):
         return "wool"
@@ -214,6 +216,7 @@ def _material(path: str, tags: set[str]) -> str:
         "dark_oak",
         "mangrove",
         "cherry",
+        "poplar",
         "pale_oak",
         "crimson",
         "warped",
@@ -233,7 +236,9 @@ def _material(path: str, tags: set[str]) -> str:
         "_trapdoor",
         "_pressure_plate",
         "_sign",
+        "_hanging_sign",
         "_shelf",
+        "_fence_gate",
     )
     if path.startswith(tuple(f"{species}_" for species in wood_species)) and any(
         part in path for part in wood_parts
@@ -289,6 +294,14 @@ def _material(path: str, tags: set[str]) -> str:
         return "ore"
     if any(word in path for word in ("copper", "iron", "gold", "netherite", "anvil", "chain")):
         return "metal"
+    if any(
+        path == word
+        or path.startswith(f"{word}_")
+        or path.endswith(f"_{word}")
+        or f"_{word}_" in path
+        for word in ("cinnabar", "sulfur")
+    ):
+        return "mineral"
     if path in {
         "bell",
         "cauldron",
@@ -382,6 +395,7 @@ def _material(path: str, tags: set[str]) -> str:
         word in path
         for word in (
             "flower",
+            "shrub",
             "leaves",
             "sapling",
             "grass",
@@ -403,6 +417,7 @@ def _material(path: str, tags: set[str]) -> str:
             "lichen",
             "pumpkin",
             "melon",
+            "shelf_mushroom",
             "wart",
             "berry",
             "cocoa",
