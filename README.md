@@ -87,6 +87,6 @@ Materialize は `tintedOklab` にだけブロックの乗算色を適用し、`u
 
 ## 状態
 
-ブロック一覧・状態・既定値、面ごとの色、状態ごとの光、着色、描画方式を生成します。配布するのは数値データだけで、Minecraftのjar・テクスチャ・モデルは含めません。抽出には利用者が取得したjarを使います。
+v1.0.0 はブロック一覧・状態・既定値、面ごとの色、材質・ファミリー・劣化の連鎖、状態ごとの光、着色、描画方式を提供します。GitHub Release で版ごとの JSON、版間差分、`generator.commit`、`SHA256SUMS` を配布します。再生成は上記の `mcblockdata build --all` を使い、Mojang 公式 version manifest から取得して SHA-1 検証した jar を利用します。配布資産に Minecraft の jar・テクスチャ・モデルは含めません。
 
 本プロジェクトは非公式で、Mojang Studios・Microsoft とは関係ありません。
